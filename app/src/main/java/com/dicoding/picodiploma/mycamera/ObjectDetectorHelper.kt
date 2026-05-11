@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.os.SystemClock
 import android.util.Log
-import android.view.Surface
 import androidx.camera.core.ImageProxy
 import com.google.android.gms.tflite.client.TfLiteInitializationOptions
 import com.google.android.gms.tflite.gpu.support.TfLiteGpu
@@ -16,19 +15,19 @@ import org.tensorflow.lite.support.image.ImageProcessor
 import org.tensorflow.lite.support.image.TensorImage
 import org.tensorflow.lite.support.image.ops.ResizeOp
 import org.tensorflow.lite.task.core.BaseOptions
-import org.tensorflow.lite.task.core.vision.ImageProcessingOptions
 import org.tensorflow.lite.task.gms.vision.TfLiteVision
-import org.tensorflow.lite.task.gms.vision.classifier.Classifications
-import org.tensorflow.lite.task.gms.vision.classifier.ImageClassifier
+import androidx.core.graphics.createBitmap
+import org.tensorflow.lite.task.gms.vision.detector.Detection
+import org.tensorflow.lite.task.gms.vision.detector.ObjectDetector
 
-class ImageClassifierHelper(
+class ObjectDetectorHelper(
     var threshold: Float = 0.1f,
     var maxResults: Int = 3,
-    val modelName: String = "mobilenet_v1.tflite",
+    val modelName: String = "efficientdet_lite0_v1.tflite",
     val context: Context,
-    val classifierListener: ClassifierListener?
+    val detectorListener: DetectorListener?
 ) {
-    private var imageClassifier: ImageClassifier? = null
+    private var objectDetector: ObjectDetector? = null
 
     init {
         TfLiteGpu.isGpuDelegateAvailable(context).onSuccessTask { gpuAvailable ->
@@ -38,14 +37,14 @@ class ImageClassifierHelper(
             }
             TfLiteVision.initialize(context, optionsBuilder.build())
         }.addOnSuccessListener {
-            setupImageClassifier()
+            setupObjectDetector()
         }.addOnFailureListener {
-            classifierListener?.onError(context.getString(R.string.tflitevision_is_not_initialized_yet))
+            detectorListener?.onError(context.getString(R.string.tflitevision_is_not_initialized_yet))
         }
     }
 
-    private fun setupImageClassifier() {
-        val optionsBuilder = ImageClassifier.ImageClassifierOptions.builder()
+    private fun setupObjectDetector() {
+        val optionsBuilder = ObjectDetector.ObjectDetectorOptions.builder()
             .setScoreThreshold(threshold)
             .setMaxResults(maxResults)
         val baseOptionsBuilder = BaseOptions.builder()
@@ -62,28 +61,28 @@ class ImageClassifierHelper(
         optionsBuilder.setBaseOptions(baseOptionsBuilder.build())
 
         try {
-            imageClassifier = ImageClassifier.createFromFileAndOptions(
+            objectDetector = ObjectDetector.createFromFileAndOptions(
                 context,
                 modelName,
                 optionsBuilder.build()
             )
         } catch (e: IllegalStateException) {
-            classifierListener?.onError(context.getString(R.string.image_classifier_failed))
+            detectorListener?.onError(context.getString(R.string.image_classifier_failed))
             Log.e(TAG, e.message.toString())
         }
     }
 
-    fun classifyImage(image: ImageProxy) {
+    fun detectObject(image: ImageProxy) {
 
         if (!TfLiteVision.isInitialized()) {
             val errorMessage = context.getString(R.string.tflitevision_is_not_initialized_yet)
             Log.e(TAG, errorMessage)
-            classifierListener?.onError(errorMessage)
+            detectorListener?.onError(errorMessage)
             return
         }
 
-        if (imageClassifier == null) {
-            setupImageClassifier()
+        if (objectDetector == null) {
+            setupObjectDetector()
         }
 
         val imageProcessor = ImageProcessor.Builder()
@@ -93,49 +92,33 @@ class ImageClassifierHelper(
 
         val tensorImage = imageProcessor.process(TensorImage.fromBitmap(toBitmap(image)))
 
-        val imageProcessingOptions = ImageProcessingOptions.builder()
-            .setOrientation(getOrientationFromRotation(image.imageInfo.rotationDegrees))
-            .build()
 
         var inferenceTime = SystemClock.uptimeMillis()
-        val results = imageClassifier?.classify(tensorImage, imageProcessingOptions)
+        val results = objectDetector?.detect(tensorImage)
         inferenceTime = SystemClock.uptimeMillis() - inferenceTime
-        classifierListener?.onResults(
+        detectorListener?.onResults(
             results,
             inferenceTime
         )
     }
 
     private fun toBitmap(image: ImageProxy): Bitmap {
-        val bitmapBuffer = Bitmap.createBitmap(
-            image.width,
-            image.height,
-            Bitmap.Config.ARGB_8888
-        )
+        val bitmapBuffer = createBitmap(image.width, image.height)
         image.use { bitmapBuffer.copyPixelsFromBuffer(image.planes[0].buffer) }
         image.close()
         return bitmapBuffer
     }
 
-    private fun getOrientationFromRotation(rotation: Int): ImageProcessingOptions.Orientation {
-        return when (rotation) {
-            Surface.ROTATION_270 -> ImageProcessingOptions.Orientation.BOTTOM_RIGHT
-            Surface.ROTATION_180 -> ImageProcessingOptions.Orientation.RIGHT_BOTTOM
-            Surface.ROTATION_90 -> ImageProcessingOptions.Orientation.TOP_LEFT
-            else -> ImageProcessingOptions.Orientation.RIGHT_TOP
-        }
-    }
-
-    interface ClassifierListener {
+    interface DetectorListener {
         fun onError(error: String)
         fun onResults(
-            results: List<Classifications>?,
+            results: List<Detection?>?,
             inferenceTime: Long
         )
     }
 
     companion object {
-        private const val TAG = "ImageClassifierHelper"
+        private const val TAG = "ObjectDetectorHelper"
     }
 }
 
