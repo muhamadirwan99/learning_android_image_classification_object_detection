@@ -8,21 +8,19 @@ import android.util.Log
 import androidx.camera.core.ImageProxy
 import com.google.android.gms.tflite.client.TfLiteInitializationOptions
 import com.google.android.gms.tflite.gpu.support.TfLiteGpu
-import org.tensorflow.lite.DataType
 import org.tensorflow.lite.gpu.CompatibilityList
-import org.tensorflow.lite.support.common.ops.CastOp
 import org.tensorflow.lite.support.image.ImageProcessor
 import org.tensorflow.lite.support.image.TensorImage
-import org.tensorflow.lite.support.image.ops.ResizeOp
 import org.tensorflow.lite.task.core.BaseOptions
 import org.tensorflow.lite.task.gms.vision.TfLiteVision
 import androidx.core.graphics.createBitmap
+import org.tensorflow.lite.support.image.ops.Rot90Op
 import org.tensorflow.lite.task.gms.vision.detector.Detection
 import org.tensorflow.lite.task.gms.vision.detector.ObjectDetector
 
 class ObjectDetectorHelper(
-    var threshold: Float = 0.1f,
-    var maxResults: Int = 3,
+    var threshold: Float = 0.5f,
+    var maxResults: Int = 5,
     val modelName: String = "efficientdet_lite0_v1.tflite",
     val context: Context,
     val detectorListener: DetectorListener?
@@ -86,8 +84,7 @@ class ObjectDetectorHelper(
         }
 
         val imageProcessor = ImageProcessor.Builder()
-            .add(ResizeOp(224, 224, ResizeOp.ResizeMethod.NEAREST_NEIGHBOR))
-            .add(CastOp(DataType.UINT8))
+            .add(Rot90Op(-image.imageInfo.rotationDegrees / 90))
             .build()
 
         val tensorImage = imageProcessor.process(TensorImage.fromBitmap(toBitmap(image)))
@@ -112,7 +109,7 @@ class ObjectDetectorHelper(
     interface DetectorListener {
         fun onError(error: String)
         fun onResults(
-            results: List<Detection?>?,
+            results: MutableList<Detection>?,
             inferenceTime: Long
         )
     }
