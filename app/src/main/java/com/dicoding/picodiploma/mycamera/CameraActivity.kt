@@ -51,12 +51,18 @@ class CameraActivity : AppCompatActivity() {
 
                 override fun onResults(
                     results: MutableList<Detection>?,
-                    inferenceTime: Long
+                    inferenceTime: Long,
+                    imageHeight: Int,
+                    imageWidth: Int,
                 ) {
                     runOnUiThread {
                         results?.let { it ->
                             if (it.isNotEmpty() && it[0].categories.isNotEmpty()) {
                                 println(it)
+
+                                binding.overlay.setResults(
+                                    results, imageHeight, imageWidth,
+                                )
 
                                 val builder = StringBuilder()
                                 for (result in results) {
@@ -70,6 +76,7 @@ class CameraActivity : AppCompatActivity() {
                                 binding.tvResult.visibility = View.VISIBLE
                                 binding.tvInferenceTime.text = "$inferenceTime ms"
                             } else {
+                                binding.overlay.clear()
                                 binding.tvResult.text = ""
                                 binding.tvInferenceTime.text = ""
                             }
