@@ -2,13 +2,11 @@ package com.dicoding.picodiploma.mycamera
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import androidx.camera.core.ImageProxy
 import com.google.android.gms.tflite.client.TfLiteInitializationOptions
 import com.google.android.gms.tflite.gpu.support.TfLiteGpu
-import org.tensorflow.lite.gpu.CompatibilityList
 import org.tensorflow.lite.support.image.ImageProcessor
 import org.tensorflow.lite.support.image.TensorImage
 import org.tensorflow.lite.task.core.BaseOptions
@@ -46,16 +44,7 @@ class ObjectDetectorHelper(
             .setScoreThreshold(threshold)
             .setMaxResults(maxResults)
         val baseOptionsBuilder = BaseOptions.builder()
-
-        if (CompatibilityList().isDelegateSupportedOnThisDevice){
-            baseOptionsBuilder.useGpu()
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1){
-            baseOptionsBuilder.useNnapi()
-        } else {
-            // Menggunakan CPU
-            baseOptionsBuilder.setNumThreads(4)
-        }
-
+            .useGpu()
         optionsBuilder.setBaseOptions(baseOptionsBuilder.build())
 
         try {
@@ -73,9 +62,7 @@ class ObjectDetectorHelper(
     fun detectObject(image: ImageProxy) {
 
         if (!TfLiteVision.isInitialized()) {
-            val errorMessage = context.getString(R.string.tflitevision_is_not_initialized_yet)
-            Log.e(TAG, errorMessage)
-            detectorListener?.onError(errorMessage)
+            image.close()
             return
         }
 
@@ -83,12 +70,17 @@ class ObjectDetectorHelper(
             setupObjectDetector()
         }
 
+        if (objectDetector == null) {
+            image.close()
+            return
+        }
+
         val imageProcessor = ImageProcessor.Builder()
             .add(Rot90Op(-image.imageInfo.rotationDegrees / 90))
             .build()
 
-        val tensorImage = imageProcessor.process(TensorImage.fromBitmap(toBitmap(image)))
-
+        val bitmap = toBitmap(image)
+        val tensorImage = imageProcessor.process(TensorImage.fromBitmap(bitmap))
 
         var inferenceTime = SystemClock.uptimeMillis()
         val results = objectDetector?.detect(tensorImage)
@@ -102,7 +94,6 @@ class ObjectDetectorHelper(
     private fun toBitmap(image: ImageProxy): Bitmap {
         val bitmapBuffer = createBitmap(image.width, image.height)
         image.use { bitmapBuffer.copyPixelsFromBuffer(image.planes[0].buffer) }
-        image.close()
         return bitmapBuffer
     }
 

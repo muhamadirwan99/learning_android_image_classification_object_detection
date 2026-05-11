@@ -3,6 +3,7 @@ package com.dicoding.picodiploma.mycamera
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.Toast
@@ -48,19 +49,25 @@ class CameraActivity : AppCompatActivity() {
                     }
                 }
 
-                override fun onResults(results: List<Detection?>?, inferenceTime: Long) {
+                override fun onResults(
+                    results: MutableList<Detection>?,
+                    inferenceTime: Long
+                ) {
                     runOnUiThread {
                         results?.let { it ->
                             if (it.isNotEmpty() && it[0].categories.isNotEmpty()) {
                                 println(it)
-                                val sortedCategories =
-                                    it[0].categories.sortedByDescending { it?.score }
-                                val displayResult =
-                                    sortedCategories.joinToString("\n") {
-                                        "${it.label} " + NumberFormat.getPercentInstance()
-                                            .format(it.score).trim()
-                                    }
-                                binding.tvResult.text = displayResult
+
+                                val builder = StringBuilder()
+                                for (result in results) {
+                                    val displayResult =
+                                        "${result.categories[0].label} " + NumberFormat.getPercentInstance()
+                                            .format(result.categories[0].score).trim()
+                                    builder.append("$displayResult \n")
+                                }
+
+                                binding.tvResult.text = builder.toString()
+                                binding.tvResult.visibility = View.VISIBLE
                                 binding.tvInferenceTime.text = "$inferenceTime ms"
                             } else {
                                 binding.tvResult.text = ""
